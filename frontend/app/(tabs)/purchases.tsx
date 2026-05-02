@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { purchasesApi } from '@/api/purchases';
 import { useHouseholdStore } from '@/stores/household-store';
+import { useCurrencyStore } from '@/stores/currency-store';
 import type { Purchase } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
@@ -19,6 +20,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 export default function PurchasesScreen() {
   const household = useHouseholdStore((s) => s.currentHousehold);
+  const sym = useCurrencyStore((s) => s.currency.symbol);
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
@@ -165,7 +167,7 @@ export default function PurchasesScreen() {
           </View>
         )}
       </View>
-      <Text style={styles.cardAmount}>${Number(p.total_amount).toFixed(2)}</Text>
+      <Text style={styles.cardAmount}>{sym}{Number(p.total_amount).toFixed(2)}</Text>
     </TouchableOpacity>
   );
 
@@ -189,7 +191,7 @@ export default function PurchasesScreen() {
         {data && (
           <View style={styles.summary}>
             <View style={styles.summaryBlock}>
-              <Text style={styles.summaryValue}>${Number(data.total_amount).toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>{sym}{Number(data.total_amount).toFixed(2)}</Text>
               <Text style={styles.summaryLabel}>Total Spent</Text>
             </View>
             <View style={styles.summaryDivider} />

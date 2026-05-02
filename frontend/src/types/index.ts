@@ -220,3 +220,77 @@ export interface UpcomingExpense {
 // ── Member Roles ──
 export type MemberRole = 'owner' | 'admin' | 'member' | 'viewer';
 
+// ── Dashboard ──
+export interface DashboardExpense {
+  id: string;
+  title: string;
+  amount: number;
+  expense_date: string;
+  category_id: string | null;
+  category_name: string | null;
+  payment_method: string | null;
+}
+
+export interface DashboardBudget {
+  id: string;
+  name: string;
+  amount: number;
+  spent: number;
+  remaining: number;
+  percentage_used: number;
+  category_id: string | null;
+}
+
+export interface DashboardRecurring {
+  id: string;
+  title: string;
+  amount: number;
+  frequency: string;
+  next_due_date: string;
+  days_until_due: number;
+  is_overdue: boolean;
+}
+
+export interface DashboardLowStock {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  low_stock_threshold: number;
+  location: string | null;
+}
+
+export interface DashboardPurchase {
+  id: string;
+  store_name: string | null;
+  purchase_date: string;
+  total_amount: number;
+  item_count: number;
+}
+
+export interface QuickAction {
+  key: string;
+  icon: string;
+  label: string;
+  description: string;
+}
+
+export interface DashboardSummary {
+  spent_this_month: number;
+  expense_count_this_month: number;
+  total_budget: number;
+  total_budget_remaining: number;
+  budget_utilization_pct: number;
+  recent_expenses: DashboardExpense[];
+  budgets: DashboardBudget[];
+  upcoming_recurring: DashboardRecurring[];
+  low_stock_items: DashboardLowStock[];
+  recent_purchases: DashboardPurchase[];
+  quick_actions: QuickAction[];
+  overdue_recurring_count: number;
+  low_stock_count: number;
+  budgets_over_limit_count: number;
+  inventory_total_count: number;
+  purchase_count_this_month: number;
+  purchase_total_this_month: number;
+}

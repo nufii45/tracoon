@@ -9,6 +9,7 @@ from app.routers.budget import router as budget_router
 from app.routers.inventory import router as inventory_router
 from app.routers.purchase import router as purchase_router
 from app.routers.recurring_expense import router as recurring_expense_router
+from app.routers.dashboard import router as dashboard_router
 
 settings = get_settings()
 
@@ -37,6 +38,7 @@ app.include_router(budget_router)
 app.include_router(inventory_router)
 app.include_router(purchase_router)
 app.include_router(recurring_expense_router)
+app.include_router(dashboard_router)
 
 
 # --- Health Check ---

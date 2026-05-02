@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
   Modal, TextInput, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth-store';
 import { useHouseholdStore } from '@/stores/household-store';
+import { useCurrencyStore, CURRENCIES, type Currency } from '@/stores/currency-store';
 import { categoriesApi } from '@/api/categories';
 import type { Category, CategoryType } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
@@ -22,10 +23,11 @@ const categoryTypes: { key: CategoryType; label: string; icon: IoniconsName; col
   { key: 'purchase', label: 'Purchase', icon: 'cart-outline', color: colors.warning },
 ];
 
-const presetColors = [
-  '#6C5CE7', '#A29BFE', '#00CEC9', '#81ECEC', '#00B894',
-  '#FDCB6E', '#FF6B6B', '#74B9FF', '#FD79A8', '#E17055',
-  '#636E72', '#B2BEC3', '#DFE6E9', '#55EFC4', '#FAB1A0',
+const presetColors: string[] = [
+  colors.primary, colors.primaryLight, colors.primaryDark,
+  colors.accent, colors.accentLight, colors.accentDark,
+  colors.success, colors.warning, colors.danger, colors.info,
+  colors.surfaceDark, colors.secondary, colors.secondaryLight, colors.secondaryDark,
 ];
 
 const presetIcons: IoniconsName[] = [
@@ -35,7 +37,9 @@ const presetIcons: IoniconsName[] = [
   'wifi-outline', 'construct-outline', 'leaf-outline', 'flash-outline',
 ];
 
-const emptyForm = { name: '', category_type: 'expense' as CategoryType, color: '#6C5CE7', icon: '' };
+const emptyForm: { name: string; category_type: CategoryType; color: string; icon: string } = {
+  name: '', category_type: 'expense', color: colors.accent, icon: '',
+};
 
 // ── Settings Item Component ──
 function SettingsItem({ icon, label, value, onPress, danger }: {
@@ -58,13 +62,24 @@ function SettingsItem({ icon, label, value, onPress, danger }: {
 export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
   const household = useHouseholdStore((s) => s.currentHousehold);
+  const { currency, setCurrency, loadCurrency } = useCurrencyStore();
   const queryClient = useQueryClient();
 
   const [showCategories, setShowCategories] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
+  const [showCurrency, setShowCurrency] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState('');
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [filterType, setFilterType] = useState<CategoryType | ''>('');
+
+  useEffect(() => { loadCurrency(); }, []);
+
+  const filteredCurrencies = CURRENCIES.filter((c) =>
+    !currencySearch ||
+    c.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
+    c.code.toLowerCase().includes(currencySearch.toLowerCase())
+  );
 
   // ── Queries ──
   const { data: categories, isLoading: catsLoading } = useQuery({
@@ -105,7 +120,7 @@ export default function SettingsScreen() {
 
   const openEditCat = (cat: Category) => {
     setEditingCat(cat);
-    setForm({ name: cat.name, category_type: cat.category_type as CategoryType, color: cat.color || '#6C5CE7', icon: cat.icon || '' });
+    setForm({ name: cat.name, category_type: cat.category_type as CategoryType, color: cat.color || colors.accent, icon: cat.icon || '' });
     setShowCatForm(true);
   };
 
@@ -196,6 +211,17 @@ export default function SettingsScreen() {
             label="Manage Categories"
             value={`Organize your expense, budget & inventory categories`}
             onPress={() => setShowCategories(true)}
+          />
+        </View>
+
+        {/* Preferences */}
+        <Text style={styles.sectionTitle}>Preferences</Text>
+        <View style={styles.section}>
+          <SettingsItem
+            icon="cash-outline"
+            label="Currency"
+            value={`${currency.flag} ${currency.code} (${currency.symbol})`}
+            onPress={() => { setCurrencySearch(''); setShowCurrency(true); }}
           />
         </View>
 
@@ -375,6 +401,52 @@ export default function SettingsScreen() {
             </View>
           </KeyboardAvoidingView>
         </Modal>
+      </Modal>
+
+      {/* ══════ Currency Picker Modal ══════ */}
+      <Modal visible={showCurrency} animationType="slide" onRequestClose={() => setShowCurrency(false)}>
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          <View style={styles.catHeader}>
+            <TouchableOpacity onPress={() => setShowCurrency(false)}>
+              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.catHeaderTitle}>Select Currency</Text>
+            <View style={{ width: 36 }} />
+          </View>
+          <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
+            <TextInput
+              style={styles.input}
+              placeholder="Search currencies..."
+              placeholderTextColor={colors.textMuted}
+              value={currencySearch}
+              onChangeText={setCurrencySearch}
+              autoCorrect={false}
+            />
+          </View>
+          <FlatList
+            data={filteredCurrencies}
+            keyExtractor={(item) => item.code}
+            contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xxl }}
+            renderItem={({ item }) => {
+              const isActive = currency.code === item.code;
+              return (
+                <TouchableOpacity
+                  style={[styles.currencyRow, isActive && styles.currencyRowActive]}
+                  onPress={() => { setCurrency(item); setShowCurrency(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.currencyFlag}>{item.flag}</Text>
+                  <View style={styles.currencyInfo}>
+                    <Text style={[styles.currencyCode, isActive && styles.currencyTextActive]}>{item.code}</Text>
+                    <Text style={[styles.currencyName, isActive && styles.currencyTextActive]}>{item.name}</Text>
+                  </View>
+                  <Text style={[styles.currencySymbol, isActive && styles.currencyTextActive]}>{item.symbol}</Text>
+                  {isActive && <Ionicons name="checkmark-circle" size={22} color={colors.white} />}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -557,4 +629,20 @@ const styles = StyleSheet.create({
   },
   btnSecondaryText: { fontSize: fontSize.md, fontWeight: fontWeight.medium, color: colors.textSecondary },
   btnDisabled: { opacity: 0.5 },
+
+  // Currency picker
+  currencyRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.xs,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderLight,
+  },
+  currencyRowActive: {
+    backgroundColor: colors.accent, borderColor: colors.accent,
+  },
+  currencyFlag: { fontSize: 24 },
+  currencyInfo: { flex: 1, gap: 2 },
+  currencyCode: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.textPrimary },
+  currencyName: { fontSize: fontSize.sm, color: colors.textSecondary },
+  currencySymbol: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.textMuted, marginRight: spacing.xs },
+  currencyTextActive: { color: colors.white },
 });

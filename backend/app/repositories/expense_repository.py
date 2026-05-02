@@ -40,16 +40,65 @@ class ExpenseRepository:
         created_by: UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        uncategorized_only: bool = False,
     ) -> tuple[int, Decimal]:
-        """Return (count, total_amount) for filtered expenses."""
+        """Return (count, total_amount) for filtered expenses.
+
+        If uncategorized_only is True, only expenses with category_id IS NULL
+        are included — used by general budgets to avoid double-counting.
+        """
         count_stmt = select(func.count(Expense.id)).where(
             Expense.household_id == household_id
         )
         sum_stmt = select(func.coalesce(func.sum(Expense.amount), 0)).where(
             Expense.household_id == household_id
         )
+
+        if uncategorized_only:
+            count_stmt = count_stmt.where(Expense.category_id.is_(None))
+            sum_stmt = sum_stmt.where(Expense.category_id.is_(None))
+
         count_stmt = self._apply_filters(count_stmt, category_id, created_by, date_from, date_to)
         sum_stmt = self._apply_filters(sum_stmt, category_id, created_by, date_from, date_to)
+
+        total_count = self.db.execute(count_stmt).scalar() or 0
+        total_amount = self.db.execute(sum_stmt).scalar() or Decimal("0")
+        return total_count, total_amount
+
+    def count_and_sum_excluding_categories(
+        self,
+        household_id: UUID,
+        exclude_category_ids: list[UUID],
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> tuple[int, Decimal]:
+        """Return (count, total_amount) for expenses NOT in the given categories.
+
+        Used by general (uncategorized) budgets to avoid double-counting
+        expenses that belong to category-specific budgets.
+        """
+        count_stmt = select(func.count(Expense.id)).where(
+            Expense.household_id == household_id
+        )
+        sum_stmt = select(func.coalesce(func.sum(Expense.amount), 0)).where(
+            Expense.household_id == household_id
+        )
+
+        # Exclude expenses that belong to another budget's category
+        if exclude_category_ids:
+            count_stmt = count_stmt.where(
+                (Expense.category_id == None) | (~Expense.category_id.in_(exclude_category_ids))
+            )
+            sum_stmt = sum_stmt.where(
+                (Expense.category_id == None) | (~Expense.category_id.in_(exclude_category_ids))
+            )
+
+        if date_from is not None:
+            count_stmt = count_stmt.where(Expense.expense_date >= date_from)
+            sum_stmt = sum_stmt.where(Expense.expense_date >= date_from)
+        if date_to is not None:
+            count_stmt = count_stmt.where(Expense.expense_date <= date_to)
+            sum_stmt = sum_stmt.where(Expense.expense_date <= date_to)
 
         total_count = self.db.execute(count_stmt).scalar() or 0
         total_amount = self.db.execute(sum_stmt).scalar() or Decimal("0")

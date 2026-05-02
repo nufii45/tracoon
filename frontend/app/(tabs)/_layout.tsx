@@ -28,6 +28,7 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           href: '/',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -38,6 +39,7 @@ export default function TabsLayout() {
         options={{
           title: 'Expenses',
           href: '/expenses',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="wallet" size={size} color={color} />
           ),
@@ -48,6 +50,7 @@ export default function TabsLayout() {
         options={{
           title: 'Budgets',
           href: '/budgets',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pie-chart" size={size} color={color} />
           ),
@@ -58,6 +61,7 @@ export default function TabsLayout() {
         options={{
           title: 'Inventory',
           href: '/inventory',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cube" size={size} color={color} />
           ),
@@ -68,6 +72,7 @@ export default function TabsLayout() {
         options={{
           title: 'Purchases',
           href: '/purchases',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cart" size={size} color={color} />
           ),
@@ -77,7 +82,8 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          href: '/settings',
+          href: null,
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings" size={size} color={color} />
           ),

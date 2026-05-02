@@ -10,15 +10,16 @@ import { recurringExpensesApi } from '@/api/recurring-expenses';
 import { categoriesApi } from '@/api/categories';
 import type { RecurringExpense, UpcomingExpense, Category } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
+import { useCurrencyStore } from '@/stores/currency-store';
 
-const FREQUENCIES = ['daily','weekly','biweekly','monthly','quarterly','yearly'] as const;
-const FREQ_LABELS: Record<string,string> = {
-  daily:'Daily', weekly:'Weekly', biweekly:'Biweekly',
-  monthly:'Monthly', quarterly:'Quarterly', yearly:'Yearly',
+const FREQUENCIES = ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'] as const;
+const FREQ_LABELS: Record<string, string> = {
+  daily: 'Daily', weekly: 'Weekly', biweekly: 'Biweekly',
+  monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly',
 };
-const PAY_METHODS = ['cash','card','bank_transfer','e_wallet','other'] as const;
-const PAY_LABELS: Record<string,string> = {
-  cash:'Cash', card:'Card', bank_transfer:'Bank', e_wallet:'E-Wallet', other:'Other',
+const PAY_METHODS = ['cash', 'card', 'bank_transfer', 'e_wallet', 'other'] as const;
+const PAY_LABELS: Record<string, string> = {
+  cash: 'Cash', card: 'Card', bank_transfer: 'Bank', e_wallet: 'E-Wallet', other: 'Other',
 };
 
 export default function RecurringSection({ householdId }: { householdId: string }) {
@@ -27,11 +28,14 @@ export default function RecurringSection({ householdId }: { householdId: string 
   const [editing, setEditing] = useState<RecurringExpense | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
 
+  const { currency } = useCurrencyStore();
+  const sym = currency.symbol;
+
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [frequency, setFrequency] = useState<string>('monthly');
-  const [nextDueDate, setNextDueDate] = useState(new Date().toISOString().slice(0,10));
-  const [categoryId, setCategoryId] = useState<string|null>(null);
+  const [nextDueDate, setNextDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [payMethod, setPayMethod] = useState('');
   const [notes, setNotes] = useState('');
@@ -63,7 +67,7 @@ export default function RecurringSection({ householdId }: { householdId: string 
     onSuccess: () => { inv(); resetForm(); },
   });
   const updateM = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: Record<string,unknown> }) =>
+    mutationFn: ({ id, d }: { id: string; d: Record<string, unknown> }) =>
       recurringExpensesApi.update(householdId, id, d),
     onSuccess: () => { inv(); resetForm(); },
   });
@@ -82,7 +86,7 @@ export default function RecurringSection({ householdId }: { householdId: string 
 
   function resetForm() {
     setTitle(''); setAmount(''); setFrequency('monthly');
-    setNextDueDate(new Date().toISOString().slice(0,10));
+    setNextDueDate(new Date().toISOString().slice(0, 10));
     setCategoryId(null); setDescription(''); setPayMethod('');
     setNotes(''); setIsActive(true); setEditing(null); setShowModal(false);
   }
@@ -90,8 +94,8 @@ export default function RecurringSection({ householdId }: { householdId: string 
   function openEdit(r: RecurringExpense) {
     setEditing(r); setTitle(r.title); setAmount(String(Number(r.amount)));
     setFrequency(r.frequency); setNextDueDate(r.next_due_date);
-    setCategoryId(r.category_id); setDescription(r.description||'');
-    setPayMethod(r.payment_method||''); setNotes(r.notes||'');
+    setCategoryId(r.category_id); setDescription(r.description || '');
+    setPayMethod(r.payment_method || ''); setNotes(r.notes || '');
     setIsActive(r.is_active); setShowModal(true);
   }
 
@@ -99,21 +103,23 @@ export default function RecurringSection({ householdId }: { householdId: string 
     const a = parseFloat(amount);
     if (!title.trim() || !a || a < 0) return;
     if (editing) {
-      updateM.mutate({ id: editing.id, d: {
-        title: title.trim(), amount: a, frequency, next_due_date: nextDueDate,
-        category_id: categoryId||null, description: description.trim()||null,
-        payment_method: payMethod||null, notes: notes.trim()||null, is_active: isActive,
-      }});
+      updateM.mutate({
+        id: editing.id, d: {
+          title: title.trim(), amount: a, frequency, next_due_date: nextDueDate,
+          category_id: categoryId || null, description: description.trim() || null,
+          payment_method: payMethod || null, notes: notes.trim() || null, is_active: isActive,
+        }
+      });
     } else {
       createM.mutate({
         title: title.trim(), amount: a, frequency, next_due_date: nextDueDate,
-        category_id: categoryId||undefined, description: description.trim()||undefined,
-        payment_method: payMethod||undefined, notes: notes.trim()||undefined,
+        category_id: categoryId || undefined, description: description.trim() || undefined,
+        payment_method: payMethod || undefined, notes: notes.trim() || undefined,
       });
     }
   }
 
-  const catName = (id: string|null) => {
+  const catName = (id: string | null) => {
     if (!id || !categories) return null;
     return categories.find((c: Category) => c.id === id)?.name || null;
   };
@@ -143,7 +149,7 @@ export default function RecurringSection({ householdId }: { householdId: string 
         </View>
         <Text style={s.cardDue}>Next: {r.next_due_date}</Text>
       </View>
-      <Text style={[s.cardAmt, !r.is_active && { opacity: 0.5 }]}>${Number(r.amount).toFixed(2)}</Text>
+      <Text style={[s.cardAmt, !r.is_active && { opacity: 0.5 }]}>{sym}{Number(r.amount).toFixed(2)}</Text>
     </TouchableOpacity>
   );
 
@@ -155,7 +161,7 @@ export default function RecurringSection({ householdId }: { householdId: string 
         <View style={s.statDiv} />
         <View style={s.statBlock}><Text style={[s.statVal, overdueCount > 0 && { color: colors.danger }]}>{overdueCount}</Text><Text style={s.statLbl}>Overdue</Text></View>
         <View style={s.statDiv} />
-        <View style={s.statBlock}><Text style={s.statVal}>{data?.total_count||0}</Text><Text style={s.statLbl}>Total</Text></View>
+        <View style={s.statBlock}><Text style={s.statVal}>{data?.total_count || 0}</Text><Text style={s.statLbl}>Total</Text></View>
       </View>
       <View style={s.actions}>
         <TouchableOpacity style={s.genBtn} onPress={() => Alert.alert('Generate', 'Create expenses from due rules?', [
@@ -209,8 +215,8 @@ export default function RecurringSection({ householdId }: { householdId: string 
               <Text style={s.lbl}>Frequency</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
                 {FREQUENCIES.map(f => (
-                  <TouchableOpacity key={f} style={[s.chip, frequency===f && s.chipOn]} onPress={() => setFrequency(f)}>
-                    <Text style={[s.chipTxt, frequency===f && s.chipTxtOn]}>{FREQ_LABELS[f]}</Text>
+                  <TouchableOpacity key={f} style={[s.chip, frequency === f && s.chipOn]} onPress={() => setFrequency(f)}>
+                    <Text style={[s.chipTxt, frequency === f && s.chipTxtOn]}>{FREQ_LABELS[f]}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -220,8 +226,8 @@ export default function RecurringSection({ householdId }: { householdId: string 
                   <Text style={[s.chipTxt, !categoryId && s.chipTxtOn]}>None</Text>
                 </TouchableOpacity>
                 {categories?.map((c: Category) => (
-                  <TouchableOpacity key={c.id} style={[s.chip, categoryId===c.id && s.chipOn]} onPress={() => setCategoryId(c.id)}>
-                    <Text style={[s.chipTxt, categoryId===c.id && s.chipTxtOn]}>{c.name}</Text>
+                  <TouchableOpacity key={c.id} style={[s.chip, categoryId === c.id && s.chipOn]} onPress={() => setCategoryId(c.id)}>
+                    <Text style={[s.chipTxt, categoryId === c.id && s.chipTxtOn]}>{c.name}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -231,8 +237,8 @@ export default function RecurringSection({ householdId }: { householdId: string 
                   <Text style={[s.chipTxt, !payMethod && s.chipTxtOn]}>None</Text>
                 </TouchableOpacity>
                 {PAY_METHODS.map(m => (
-                  <TouchableOpacity key={m} style={[s.chip, payMethod===m && s.chipOn]} onPress={() => setPayMethod(m)}>
-                    <Text style={[s.chipTxt, payMethod===m && s.chipTxtOn]}>{PAY_LABELS[m]}</Text>
+                  <TouchableOpacity key={m} style={[s.chip, payMethod === m && s.chipOn]} onPress={() => setPayMethod(m)}>
+                    <Text style={[s.chipTxt, payMethod === m && s.chipTxtOn]}>{PAY_LABELS[m]}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -249,8 +255,8 @@ export default function RecurringSection({ householdId }: { householdId: string 
                 </View>
               )}
             </ScrollView>
-            <TouchableOpacity style={[s.saveBtn, (!title.trim()||!amount||isSaving) && { opacity: 0.5 }]}
-              onPress={handleSave} disabled={!title.trim()||!amount||isSaving}>
+            <TouchableOpacity style={[s.saveBtn, (!title.trim() || !amount || isSaving) && { opacity: 0.5 }]}
+              onPress={handleSave} disabled={!title.trim() || !amount || isSaving}>
               {isSaving ? <ActivityIndicator color="#fff" /> :
                 <Text style={s.saveTxt}>{editing ? 'Update Rule' : 'Create Rule'}</Text>}
             </TouchableOpacity>
@@ -273,7 +279,7 @@ export default function RecurringSection({ householdId }: { householdId: string 
                     <Text style={s.cardTitle} numberOfLines={1}>{u.title}</Text>
                     <Text style={[{ fontSize: fontSize.sm, marginTop: 2 }, { color: daysColor(u.days_until_due) }]}>{daysLabel(u.days_until_due)}</Text>
                   </View>
-                  <Text style={s.cardAmt}>${Number(u.amount).toFixed(2)}</Text>
+                  <Text style={s.cardAmt}>{sym}{Number(u.amount).toFixed(2)}</Text>
                 </View>
               )} contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }}
                 ListEmptyComponent={

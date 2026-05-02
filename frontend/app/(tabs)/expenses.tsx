@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { expensesApi } from '@/api/expenses';
 import { categoriesApi } from '@/api/categories';
 import { useHouseholdStore } from '@/stores/household-store';
+import { useCurrencyStore } from '@/stores/currency-store';
 import RecurringSection from '@/components/RecurringSection';
 import type { Expense, Category } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
@@ -33,6 +34,7 @@ const emptyForm = {
 
 export default function ExpensesScreen() {
   const household = useHouseholdStore((s) => s.currentHousehold);
+  const sym = useCurrencyStore((s) => s.currency.symbol);
   const queryClient = useQueryClient();
 
   const [segment, setSegment] = useState<Segment>('expenses');
@@ -160,9 +162,14 @@ export default function ExpensesScreen() {
             )}
           </View>
         </View>
-        <Text style={styles.cardAmount}>
-          ${Number(item.amount).toFixed(2)}
-        </Text>
+        <View style={styles.cardRight}>
+          <Text style={styles.cardAmount}>
+            {sym}{Number(item.amount).toFixed(2)}
+          </Text>
+          <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} hitSlop={8}>
+            <Ionicons name="trash-outline" size={16} color={colors.danger} />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -212,7 +219,7 @@ export default function ExpensesScreen() {
                 <View style={styles.summaryMain}>
                   <Text style={styles.summaryLabel}>Total Spent</Text>
                   <Text style={styles.summaryAmount}>
-                    ${Number(data.total_amount).toFixed(2)}
+                    {sym}{Number(data.total_amount).toFixed(2)}
                   </Text>
                 </View>
                 <Text style={styles.summaryCount}>{data.total_count} expenses</Text>
@@ -485,6 +492,11 @@ const styles = StyleSheet.create({
   },
   catChipText: { fontSize: 10, color: colors.accent, fontWeight: fontWeight.medium },
   cardAmount: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.danger },
+  cardRight: { alignItems: 'flex-end', gap: 6 },
+  deleteBtn: {
+    padding: spacing.xs, borderRadius: radius.sm,
+    backgroundColor: `${colors.danger}12`,
+  },
 
   // Empty
   empty: { alignItems: 'center', marginTop: spacing.xxl, gap: spacing.sm },

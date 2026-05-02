@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { budgetsApi } from '@/api/budgets';
 import { categoriesApi } from '@/api/categories';
 import { useHouseholdStore } from '@/stores/household-store';
+import { useCurrencyStore } from '@/stores/currency-store';
 import type { Budget, Category } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
@@ -26,6 +27,7 @@ function getProgressColor(pct: number) {
 
 export default function BudgetsScreen() {
   const household = useHouseholdStore((s) => s.currentHousehold);
+  const sym = useCurrencyStore((s) => s.currency.symbol);
   const queryClient = useQueryClient();
 
   const [showModal, setShowModal] = useState(false);
@@ -117,8 +119,20 @@ export default function BudgetsScreen() {
   };
 
   // ── Overall summary ──
-  const totalBudget = budgets?.reduce((s: number, b: Budget) => s + Number(b.amount), 0) || 0;
-  const totalSpent = budgets?.reduce((s: number, b: Budget) => s + Number(b.spent), 0) || 0;
+  const totalBudget = budgets?.reduce((s: number, b: Budget) => s + (Number(b.amount) || 0), 0) || 0;
+
+  // Deduplicate spent: multiple budgets sharing the same category (or no category)
+  // track the same expenses, so only count each bucket once.
+  const seenCategories = new Set<string>();
+  let totalSpent = 0;
+  budgets?.forEach((b: Budget) => {
+    const key = b.category_id || '__uncategorized__';
+    if (!seenCategories.has(key)) {
+      seenCategories.add(key);
+      totalSpent += Number(b.spent) || 0;
+    }
+  });
+
   const overallPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
   // ── Render Budget Card ──
@@ -153,6 +167,9 @@ export default function BudgetsScreen() {
               {item.percentage_used}%
             </Text>
           </View>
+          <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} hitSlop={8}>
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+          </TouchableOpacity>
         </View>
 
         {/* Progress bar */}
@@ -165,19 +182,19 @@ export default function BudgetsScreen() {
           <View>
             <Text style={styles.amountLabel}>Spent</Text>
             <Text style={[styles.amountValue, { color: barColor }]}>
-              ${Number(item.spent).toFixed(2)}
+              {sym}{(Number(item.spent) || 0).toFixed(2)}
             </Text>
           </View>
           <View style={styles.amountCenter}>
             <Text style={styles.amountLabel}>Budget</Text>
             <Text style={styles.amountValue}>
-              ${Number(item.amount).toFixed(2)}
+              {sym}{(Number(item.amount) || 0).toFixed(2)}
             </Text>
           </View>
           <View style={styles.amountRight}>
             <Text style={styles.amountLabel}>Remaining</Text>
-            <Text style={[styles.amountValue, { color: Number(item.remaining) < 0 ? colors.danger : colors.success }]}>
-              ${Number(item.remaining).toFixed(2)}
+            <Text style={[styles.amountValue, { color: (Number(item.remaining) || 0) < 0 ? colors.danger : colors.success }]}>
+              {sym}{(Number(item.remaining) || 0).toFixed(2)}
             </Text>
           </View>
         </View>
@@ -214,13 +231,13 @@ export default function BudgetsScreen() {
             <View style={styles.overallRow}>
               <View style={styles.overallStat}>
                 <Text style={styles.overallLabel}>Total Budget</Text>
-                <Text style={styles.overallValue}>${totalBudget.toFixed(2)}</Text>
+                <Text style={styles.overallValue}>{sym}{totalBudget.toFixed(2)}</Text>
               </View>
               <View style={styles.overallDivider} />
               <View style={styles.overallStat}>
                 <Text style={styles.overallLabel}>Total Spent</Text>
                 <Text style={[styles.overallValue, { color: getProgressColor(overallPct) }]}>
-                  ${totalSpent.toFixed(2)}
+                  {sym}{totalSpent.toFixed(2)}
                 </Text>
               </View>
               <View style={styles.overallDivider} />
@@ -428,6 +445,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, backgroundColor: colors.surfaceElevated,
   },
   pctText: { fontSize: fontSize.lg, fontWeight: fontWeight.bold },
+  deleteBtn: {
+    padding: spacing.xs, marginLeft: spacing.xs,
+    borderRadius: radius.sm, backgroundColor: `${colors.danger}12`,
+  },
   progressTrack: {
     height: 8, backgroundColor: colors.surfaceElevated,
     borderRadius: radius.full, overflow: 'hidden',

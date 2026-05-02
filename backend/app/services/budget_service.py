@@ -143,13 +143,16 @@ class BudgetService:
         """Calculate spending progress for a budget from actual expenses.
 
         - If budget has a category_id: sum expenses with that category in the period.
-        - If no category_id: sum ALL expenses in the household for the period.
+        - If no category_id: sum only UNCATEGORIZED expenses in the period.
+          This prevents double-counting: each expense is counted by at most
+          one budget (either by its category match, or by having no category).
         """
         expense_count, spent = self.expense_repo.count_and_sum(
             household_id=budget.household_id,
             category_id=budget.category_id,
             date_from=budget.period_start,
             date_to=budget.period_end,
+            uncategorized_only=budget.category_id is None,
         )
 
         remaining = budget.amount - spent
@@ -158,19 +161,19 @@ class BudgetService:
         )
 
         return {
-            "id": budget.id,
-            "household_id": budget.household_id,
-            "category_id": budget.category_id,
-            "created_by": budget.created_by,
+            "id": str(budget.id),
+            "household_id": str(budget.household_id),
+            "category_id": str(budget.category_id) if budget.category_id else None,
+            "created_by": str(budget.created_by) if budget.created_by else None,
             "name": budget.name,
             "description": budget.description,
-            "amount": budget.amount,
+            "amount": float(budget.amount),
             "period_start": budget.period_start,
             "period_end": budget.period_end,
             "created_at": budget.created_at,
             "updated_at": budget.updated_at,
-            "spent": spent,
-            "remaining": remaining,
+            "spent": float(spent),
+            "remaining": float(remaining),
             "percentage_used": round(percentage, 2),
             "expense_count": expense_count,
         }

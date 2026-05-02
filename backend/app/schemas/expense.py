@@ -55,6 +55,7 @@ class ExpenseResponse(BaseModel):
     title: str
     description: str | None
     amount: Decimal
+    currency: str
     expense_date: date
     payment_method: str | None
     notes: str | None

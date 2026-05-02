@@ -45,6 +45,9 @@ class Expense(Base):
     amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False
     )
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="PHP"
+    )
     expense_date: Mapped[date] = mapped_column(
         Date, nullable=False
     )
@@ -70,4 +73,4 @@ class Expense(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Expense {self.title} ${self.amount}>"
+        return f"<Expense {self.title} {self.currency}{self.amount}>"
