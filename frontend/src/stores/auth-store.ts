@@ -4,19 +4,26 @@ import { authApi } from '@/api/auth';
 import { saveTokens, clearTokens, getRefreshToken } from '@/lib/secure-store';
 import { queryClient } from '@/lib/query-client';
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
 
-  // Actions
   initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User) => void;
 }
+
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -25,12 +32,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isInitialized: false,
 
   initialize: async () => {
+    set({ isLoading: true });
     try {
-      set({ isLoading: true });
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) return;
+
       const user = await authApi.getMe();
-      set({ user, isAuthenticated: true, isInitialized: true, isLoading: false });
+      set({ user, isAuthenticated: true });
     } catch {
-      set({ user: null, isAuthenticated: false, isInitialized: true, isLoading: false });
+      set({ user: null, isAuthenticated: false });
+    } finally {
+      set({ isInitialized: true, isLoading: false });
     }
   },
 
@@ -40,10 +52,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const tokens = await authApi.login({ email, password });
       await saveTokens(tokens.access_token, tokens.refresh_token);
       const user = await authApi.getMe();
-      set({ user, isAuthenticated: true, isLoading: false });
+      set({ user, isAuthenticated: true });
     } catch (error) {
-      set({ isLoading: false });
       throw error;
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -51,11 +64,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       await authApi.register({ email, password, full_name: fullName });
-      // Auto-login after registration
       await get().login(email, password);
     } catch (error) {
-      set({ isLoading: false });
       throw error;
+    } finally {
+      set({ isLoading: false });
     }
   },
 

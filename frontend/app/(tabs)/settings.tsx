@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView,
   Modal, TextInput, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -8,14 +8,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth-store';
 import { useHouseholdStore } from '@/stores/household-store';
-import { useCurrencyStore, CURRENCIES, type Currency } from '@/stores/currency-store';
 import { categoriesApi } from '@/api/categories';
 import type { Category, CategoryType } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
-// ── Category type metadata ──
 const categoryTypes: { key: CategoryType; label: string; icon: IoniconsName; color: string }[] = [
   { key: 'expense', label: 'Expense', icon: 'wallet-outline', color: colors.danger },
   { key: 'budget', label: 'Budget', icon: 'pie-chart-outline', color: colors.primary },
@@ -23,11 +21,21 @@ const categoryTypes: { key: CategoryType; label: string; icon: IoniconsName; col
   { key: 'purchase', label: 'Purchase', icon: 'cart-outline', color: colors.warning },
 ];
 
-const presetColors: string[] = [
-  colors.primary, colors.primaryLight, colors.primaryDark,
-  colors.accent, colors.accentLight, colors.accentDark,
-  colors.success, colors.warning, colors.danger, colors.info,
-  colors.surfaceDark, colors.secondary, colors.secondaryLight, colors.secondaryDark,
+const presetColors = [
+  colors.primary,        // Mine Shaft
+  colors.primaryLight,   // Mine Shaft Light
+  colors.primaryDark,    // Mine Shaft Dark
+  colors.accent,         // Barley Corn
+  colors.accentLight,    // Barley Corn Light
+  colors.accentDark,     // Barley Corn Dark
+  colors.background,     // White Rock
+  colors.surface,        // Akaroa
+  colors.surfaceElevated,// Akaroa darkened
+  colors.success,
+  colors.warning,
+  colors.danger,
+  colors.info,
+  colors.surfaceDark,
 ];
 
 const presetIcons: IoniconsName[] = [
@@ -37,8 +45,12 @@ const presetIcons: IoniconsName[] = [
   'wifi-outline', 'construct-outline', 'leaf-outline', 'flash-outline',
 ];
 
+
 const emptyForm: { name: string; category_type: CategoryType; color: string; icon: string } = {
-  name: '', category_type: 'expense', color: colors.accent, icon: '',
+  name: '',
+  category_type: 'expense' as CategoryType,
+  color: colors.accent,
+  icon: '',
 };
 
 // ── Settings Item Component ──
@@ -62,24 +74,13 @@ function SettingsItem({ icon, label, value, onPress, danger }: {
 export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
   const household = useHouseholdStore((s) => s.currentHousehold);
-  const { currency, setCurrency, loadCurrency } = useCurrencyStore();
   const queryClient = useQueryClient();
 
   const [showCategories, setShowCategories] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
-  const [showCurrency, setShowCurrency] = useState(false);
-  const [currencySearch, setCurrencySearch] = useState('');
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [filterType, setFilterType] = useState<CategoryType | ''>('');
-
-  useEffect(() => { loadCurrency(); }, []);
-
-  const filteredCurrencies = CURRENCIES.filter((c) =>
-    !currencySearch ||
-    c.name.toLowerCase().includes(currencySearch.toLowerCase()) ||
-    c.code.toLowerCase().includes(currencySearch.toLowerCase())
-  );
 
   // ── Queries ──
   const { data: categories, isLoading: catsLoading } = useQuery({
@@ -117,6 +118,7 @@ export default function SettingsScreen() {
     setForm({ ...emptyForm, category_type: (filterType || 'expense') as CategoryType });
     setShowCatForm(true);
   };
+
 
   const openEditCat = (cat: Category) => {
     setEditingCat(cat);
@@ -214,17 +216,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Preferences */}
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <View style={styles.section}>
-          <SettingsItem
-            icon="cash-outline"
-            label="Currency"
-            value={`${currency.flag} ${currency.code} (${currency.symbol})`}
-            onPress={() => { setCurrencySearch(''); setShowCurrency(true); }}
-          />
-        </View>
-
         {/* App */}
         <Text style={styles.sectionTitle}>App</Text>
         <View style={styles.section}>
@@ -246,7 +237,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
             <Text style={styles.catHeaderTitle}>Categories</Text>
             <TouchableOpacity onPress={openCreateCat} style={styles.catAddBtn}>
-              <Ionicons name="add" size={22} color={colors.white} />
+              <Ionicons name="add" size={22} color={colors.textInverse} />
             </TouchableOpacity>
           </View>
 
@@ -264,7 +255,7 @@ export default function SettingsScreen() {
                 style={[styles.typeChip, filterType === t.key && { backgroundColor: t.color, borderColor: t.color }]}
                 onPress={() => setFilterType(filterType === t.key ? '' : t.key)}
               >
-                <Ionicons name={t.icon} size={14} color={filterType === t.key ? colors.white : colors.textSecondary} />
+                <Ionicons name={t.icon} size={14} color={filterType === t.key ? colors.textInverse : colors.textSecondary} />
                 <Text style={[styles.typeChipText, filterType === t.key && styles.typeChipTextActive]}>{t.label}</Text>
               </TouchableOpacity>
             ))}
@@ -331,8 +322,8 @@ export default function SettingsScreen() {
                           style={[styles.typeSel, form.category_type === t.key && { backgroundColor: t.color, borderColor: t.color }]}
                           onPress={() => setForm(f => ({ ...f, category_type: t.key }))}
                         >
-                          <Ionicons name={t.icon} size={14} color={form.category_type === t.key ? colors.white : colors.textSecondary} />
-                          <Text style={[styles.typeSelText, form.category_type === t.key && { color: colors.white }]}>{t.label}</Text>
+                          <Ionicons name={t.icon} size={14} color={form.category_type === t.key ? colors.textInverse : colors.textSecondary} />
+                          <Text style={[styles.typeSelText, form.category_type === t.key && { color: colors.textInverse }]}>{t.label}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -360,7 +351,7 @@ export default function SettingsScreen() {
                     style={[styles.iconBtn, !form.icon && styles.iconBtnActive]}
                     onPress={() => setForm(f => ({ ...f, icon: '' }))}
                   >
-                    <Text style={[styles.iconBtnText, !form.icon && { color: colors.white }]}>None</Text>
+                    <Text style={[styles.iconBtnText, !form.icon && { color: colors.textInverse }]}>None</Text>
                   </TouchableOpacity>
                   {presetIcons.map(ic => (
                     <TouchableOpacity
@@ -368,7 +359,7 @@ export default function SettingsScreen() {
                       style={[styles.iconBtn, form.icon === ic && styles.iconBtnActive]}
                       onPress={() => setForm(f => ({ ...f, icon: ic }))}
                     >
-                      <Ionicons name={ic} size={18} color={form.icon === ic ? colors.white : colors.textSecondary} />
+                      <Ionicons name={ic} size={18} color={form.icon === ic ? colors.textInverse : colors.textSecondary} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -392,7 +383,7 @@ export default function SettingsScreen() {
                   disabled={!form.name.trim() || isPending}
                 >
                   {isPending ? (
-                    <ActivityIndicator size="small" color={colors.white} />
+                    <ActivityIndicator size="small" color={colors.textInverse} />
                   ) : (
                     <Text style={styles.btnPrimaryText}>{editingCat ? 'Update' : 'Create'}</Text>
                   )}
@@ -401,52 +392,6 @@ export default function SettingsScreen() {
             </View>
           </KeyboardAvoidingView>
         </Modal>
-      </Modal>
-
-      {/* ══════ Currency Picker Modal ══════ */}
-      <Modal visible={showCurrency} animationType="slide" onRequestClose={() => setShowCurrency(false)}>
-        <SafeAreaView style={styles.safe} edges={['top']}>
-          <View style={styles.catHeader}>
-            <TouchableOpacity onPress={() => setShowCurrency(false)}>
-              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <Text style={styles.catHeaderTitle}>Select Currency</Text>
-            <View style={{ width: 36 }} />
-          </View>
-          <View style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
-            <TextInput
-              style={styles.input}
-              placeholder="Search currencies..."
-              placeholderTextColor={colors.textMuted}
-              value={currencySearch}
-              onChangeText={setCurrencySearch}
-              autoCorrect={false}
-            />
-          </View>
-          <FlatList
-            data={filteredCurrencies}
-            keyExtractor={(item) => item.code}
-            contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.xxl }}
-            renderItem={({ item }) => {
-              const isActive = currency.code === item.code;
-              return (
-                <TouchableOpacity
-                  style={[styles.currencyRow, isActive && styles.currencyRowActive]}
-                  onPress={() => { setCurrency(item); setShowCurrency(false); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.currencyFlag}>{item.flag}</Text>
-                  <View style={styles.currencyInfo}>
-                    <Text style={[styles.currencyCode, isActive && styles.currencyTextActive]}>{item.code}</Text>
-                    <Text style={[styles.currencyName, isActive && styles.currencyTextActive]}>{item.name}</Text>
-                  </View>
-                  <Text style={[styles.currencySymbol, isActive && styles.currencyTextActive]}>{item.symbol}</Text>
-                  {isActive && <Ionicons name="checkmark-circle" size={22} color={colors.white} />}
-                </TouchableOpacity>
-              );
-            }}
-          />
-        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -467,7 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary, justifyContent: 'center',
     alignItems: 'center', marginBottom: spacing.sm,
   },
-  avatarText: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.white },
+  avatarText: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.textInverse },
   profileName: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.textPrimary },
   profileEmail: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
 
@@ -488,9 +433,11 @@ const styles = StyleSheet.create({
   },
   itemIcon: {
     width: 36, height: 36, borderRadius: radius.sm,
-    backgroundColor: 'rgba(108,92,231,0.15)', justifyContent: 'center', alignItems: 'center',
+    // ── FIX 4: was rgba(108,92,231,0.15) — now uses theme border with opacity ──
+    backgroundColor: colors.surfaceElevated, justifyContent: 'center', alignItems: 'center',
   },
-  itemIconDanger: { backgroundColor: 'rgba(255,107,107,0.15)' },
+  // ── FIX 5: was rgba(255,107,107,0.15) — now uses theme surface ──
+  itemIconDanger: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.danger },
   itemContent: { flex: 1 },
   itemLabel: { fontSize: fontSize.md, color: colors.textPrimary },
   itemLabelDanger: { color: colors.danger },
@@ -518,7 +465,7 @@ const styles = StyleSheet.create({
   },
   typeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   typeChipText: { fontSize: fontSize.xs, color: colors.textSecondary },
-  typeChipTextActive: { color: colors.white, fontWeight: fontWeight.semibold },
+  typeChipTextActive: { color: colors.textInverse, fontWeight: fontWeight.semibold },
 
   // Group
   groupHeader: {
@@ -544,9 +491,11 @@ const styles = StyleSheet.create({
   catName: { flex: 1, fontSize: fontSize.md, color: colors.textPrimary, fontWeight: fontWeight.medium },
   defaultBadge: {
     paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.full,
-    backgroundColor: 'rgba(108,92,231,0.15)',
+    // ── FIX 6: was rgba(108,92,231,0.15) ──
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1, borderColor: colors.accent,
   },
-  defaultBadgeText: { fontSize: 10, color: colors.primary, fontWeight: fontWeight.semibold },
+  defaultBadgeText: { fontSize: 10, color: colors.accent, fontWeight: fontWeight.semibold },
 
   // Empty
   empty: { alignItems: 'center', marginTop: spacing.xxl, gap: spacing.sm },
@@ -598,7 +547,7 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16,
     justifyContent: 'center', alignItems: 'center',
   },
-  colorDotActive: { borderWidth: 3, borderColor: colors.white },
+  colorDotActive: { borderWidth: 3, borderColor: colors.primaryDark },
 
   // Icon picker
   iconRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -622,27 +571,11 @@ const styles = StyleSheet.create({
     flex: 1, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: spacing.md,
   },
-  btnPrimaryText: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.white },
+  btnPrimaryText: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.textInverse },
   btnSecondary: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surfaceElevated, borderRadius: radius.md, paddingVertical: spacing.md,
   },
   btnSecondaryText: { fontSize: fontSize.md, fontWeight: fontWeight.medium, color: colors.textSecondary },
   btnDisabled: { opacity: 0.5 },
-
-  // Currency picker
-  currencyRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    padding: spacing.md, borderRadius: radius.md, marginBottom: spacing.xs,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderLight,
-  },
-  currencyRowActive: {
-    backgroundColor: colors.accent, borderColor: colors.accent,
-  },
-  currencyFlag: { fontSize: 24 },
-  currencyInfo: { flex: 1, gap: 2 },
-  currencyCode: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.textPrimary },
-  currencyName: { fontSize: fontSize.sm, color: colors.textSecondary },
-  currencySymbol: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.textMuted, marginRight: spacing.xs },
-  currencyTextActive: { color: colors.white },
 });

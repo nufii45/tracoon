@@ -8,14 +8,53 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import type { AxiosError } from 'axios';
 import { useAuthStore } from '@/stores/auth-store';
 import { loginSchema, type LoginFormData } from '@/schemas/auth';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
+import { BASE_URL } from '@/api/client';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ApiErrorResponse {
+  detail?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function resolveErrorMessage(err: unknown): string {
+  const error = err as AxiosError<ApiErrorResponse>;
+
+  if (error?.code === 'ECONNABORTED') {
+    return 'Request timed out. Make sure the backend server is running.';
+  }
+  if (!error?.response) {
+    return 'Cannot connect to server. Make sure the backend is running.';
+  }
+
+  const { status, data } = error.response;
+
+  if (status === 401) return 'Incorrect email or password. Please try again.';
+  if (status === 403) return 'This account has been deactivated. Contact support.';
+  if (data?.detail && typeof data.detail === 'string') return data.detail;
+
+  return 'Something went wrong. Please try again later.';
+}
+
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuthStore();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  console.log('BASE_URL:', BASE_URL);
 
   const { control, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -23,26 +62,11 @@ export default function LoginScreen() {
   });
 
   const onSubmit = async (data: LoginFormData) => {
-    setError('');
     try {
       await login(data.email, data.password);
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const detail = err?.response?.data?.detail;
-
-      if (err?.code === 'ECONNABORTED') {
-        setError('Request timed out. Make sure the backend server is running.');
-      } else if (status === 401) {
-        setError('Incorrect email or password. Please try again.');
-      } else if (status === 403) {
-        setError('This account has been deactivated. Contact support.');
-      } else if (!err?.response) {
-        setError('Cannot connect to server. Make sure the backend is running.');
-      } else if (detail && typeof detail === 'string') {
-        setError(detail);
-      } else {
-        setError('Something went wrong. Please try again later.');
-      }
+      setError('');
+    } catch (err: unknown) {
+      setError(resolveErrorMessage(err));
     }
   };
 
@@ -59,7 +83,7 @@ export default function LoginScreen() {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Ionicons name="home" size={40} color={colors.primary} />
+              <Ionicons name="pricetag-outline" size={40} color={colors.primary} />
             </View>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your Traccoon account</Text>
@@ -90,6 +114,7 @@ export default function LoginScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="email"
                       value={value}
                       onChangeText={onChange}
                       onBlur={onBlur}
@@ -102,7 +127,14 @@ export default function LoginScreen() {
 
             {/* Password */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Password</Text>
+                <Link href="/(auth)/forgot-password" asChild>
+                  <TouchableOpacity>
+                    <Text style={styles.forgotLink}>Forgot password?</Text>
+                  </TouchableOpacity>
+                </Link>
+              </View>
               <Controller
                 control={control}
                 name="password"
@@ -114,6 +146,7 @@ export default function LoginScreen() {
                       placeholder="••••••••"
                       placeholderTextColor={colors.textMuted}
                       secureTextEntry={!showPassword}
+                      autoComplete="current-password"
                       value={value}
                       onChangeText={onChange}
                       onBlur={onBlur}
@@ -161,6 +194,10 @@ export default function LoginScreen() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
@@ -178,15 +215,26 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: fontSize.md, color: colors.textSecondary },
   form: { gap: spacing.md },
   inputGroup: { gap: spacing.xs },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
   label: {
     fontSize: fontSize.sm, fontWeight: fontWeight.medium,
-    color: colors.textSecondary, marginLeft: spacing.xs,
+    color: colors.textSecondary,
+  },
+  forgotLink: {
+    fontSize: fontSize.sm, color: colors.primary,
+    fontWeight: fontWeight.medium,
   },
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.surface, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.borderLight,
-    paddingHorizontal: spacing.md, paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
   },
   inputError: { borderColor: colors.danger },
   input: { flex: 1, fontSize: fontSize.md, color: colors.textPrimary },

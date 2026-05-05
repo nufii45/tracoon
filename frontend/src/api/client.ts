@@ -1,115 +1,124 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '@/lib/secure-store';
 
-/**
- * Resolve the backend API URL based on the current platform:
- * - Web: localhost works fine
- * - Android emulator: 10.0.2.2 maps to host machine's localhost
- * - iOS simulator / physical device: use the LAN IP of the dev machine
- */
-function getBaseUrl(): string {
-  // Allow override via Expo config extra field
-  const configUrl = Constants.expoConfig?.extra?.apiUrl;
-  if (configUrl) return configUrl;
-
-  const LAN_IP = '192.168.0.101'; // ← Your computer's LAN IP
-  const PORT = '8000';
-
-  if (Platform.OS === 'web') {
-    return `http://localhost:${PORT}`;
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean;
   }
-
-  if (Platform.OS === 'android') {
-    // 10.0.2.2 is the Android emulator alias for the host machine
-    // For physical Android devices, use LAN_IP instead
-    return `http://${LAN_IP}:${PORT}`;
-  }
-
-  // iOS simulator or physical device
-  return `http://${LAN_IP}:${PORT}`;
 }
 
-const BASE_URL = getBaseUrl();
+// ---------------------------------------------------------------------------
+// Base URL resolution
+// ---------------------------------------------------------------------------
+
+const PORT = '8000';
+
+function resolveBaseUrl(): string {
+  const configUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
+  if (configUrl) return configUrl;
+
+  switch (Platform.OS) {
+    case 'web':
+      return `http://localhost:${PORT}`;
+
+    case 'android': {
+      const isEmulator = Constants.expoConfig?.extra?.isEmulator as boolean ?? false;
+      if (isEmulator) return `http://10.0.2.2:${PORT}`;
+      // fall through to use Expo's hostUri
+    }
+
+    case 'ios':
+    default: {
+      const debuggerHost = Constants.expoConfig?.hostUri?.split(':')[0];
+      if (debuggerHost) return `http://${debuggerHost}:${PORT}`;
+      throw new Error('Could not resolve API base URL. Set apiUrl in app.json extra.');
+    }
+  }
+}
+
+export const BASE_URL = resolveBaseUrl();
+
+// ---------------------------------------------------------------------------
+// Axios instance
+// ---------------------------------------------------------------------------
 
 export const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  timeout: 10_000,
 });
 
-// ── Request interceptor: attach access token ──
-api.interceptors.request.use(async (config) => {
-  const token = await getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// ---------------------------------------------------------------------------
+// Request interceptor — attach access token
+// ---------------------------------------------------------------------------
 
-// ── Response interceptor: silent refresh on 401 ──
-let isRefreshing = false;
-let failedQueue: Array<{
+api.interceptors.request.use(
+  async (config: InternalAxiosRequestConfig) => {
+    const token = await getAccessToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+// ---------------------------------------------------------------------------
+// Response interceptor — silent token refresh on 401
+// ---------------------------------------------------------------------------
+
+type QueueEntry = {
   resolve: (token: string) => void;
   reject: (error: unknown) => void;
-}> = [];
+};
 
-function processQueue(error: unknown, token: string | null) {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(token!);
-    }
-  });
+let isRefreshing = false;
+let failedQueue: QueueEntry[] = [];
+
+function drainQueue(error: unknown, token: string | null): void {
+  failedQueue.forEach(({ resolve, reject }) =>
+    error ? reject(error) : resolve(token!),
+  );
   failedQueue = [];
 }
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const original: InternalAxiosRequestConfig = error.config;
 
-    // Only attempt refresh on 401 and if we haven't retried yet
-    if (error.response?.status !== 401 || originalRequest._retry) {
+    if (error.response?.status !== 401 || original._retry) {
       return Promise.reject(error);
     }
 
-    // If already refreshing, queue this request
     if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({
-          resolve: (token: string) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            resolve(api(originalRequest));
-          },
-          reject,
-        });
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then((token) => {
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
       });
     }
 
-    originalRequest._retry = true;
+    original._retry = true;
     isRefreshing = true;
 
     try {
       const refreshToken = await getRefreshToken();
-      if (!refreshToken) {
-        throw new Error('No refresh token');
-      }
+      if (!refreshToken) throw new Error('No refresh token available');
 
-      // Use a plain axios call to avoid interceptor loops
-      const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
-        refresh_token: refreshToken,
-      });
+      const { data } = await axios.post<{
+        access_token: string;
+        refresh_token: string;
+      }>(`${BASE_URL}/auth/refresh`, { refresh_token: refreshToken });
 
       await saveTokens(data.access_token, data.refresh_token);
-      processQueue(null, data.access_token);
+      drainQueue(null, data.access_token);
 
-      originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
-      return api(originalRequest);
+      original.headers.Authorization = `Bearer ${data.access_token}`;
+      return api(original);
     } catch (refreshError) {
-      processQueue(refreshError, null);
+      drainQueue(refreshError, null);
       await clearTokens();
       return Promise.reject(refreshError);
     } finally {

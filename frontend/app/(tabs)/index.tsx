@@ -19,6 +19,7 @@ import type {
   DashboardLowStock, DashboardPurchase, DashboardBudget, QuickAction,
 } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
+import RadialFAB from '@/components/RadialFAB';
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -316,6 +317,10 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
+            {/* ── Create Household button (moved from old FAB) ── */}
+            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowCreateModal(true)}>
+              <Ionicons name="home-outline" size={22} color={colors.tertiary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => Alert.alert('Notifications', 'No new notifications')}>
               <Ionicons name="notifications-outline" size={22} color={colors.tertiary} />
             </TouchableOpacity>
@@ -674,9 +679,9 @@ export default function HomeScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
-        <Ionicons name="add" size={28} color={colors.neutral} />
-      </TouchableOpacity>
+      {/* ══════ Radial FAB — Quick Access Panel ══════ */}
+      <RadialFAB />
+
     </SafeAreaView>
   );
 }
@@ -720,11 +725,6 @@ const styles = StyleSheet.create({
   balanceLabel: {
     fontSize: fontSize.xs, fontWeight: fontWeight.semibold,
     color: colors.textMuted, letterSpacing: 1.2,
-  },
-  plusBtn: {
-    width: 32, height: 32, borderRadius: radius.full,
-    backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: colors.borderLight,
   },
   balanceAmount: {
     fontSize: 36, fontWeight: fontWeight.bold,
@@ -931,12 +931,4 @@ const styles = StyleSheet.create({
   roleSelectorText: { fontSize: fontSize.xs, color: colors.textSecondary, textTransform: 'capitalize' },
   roleSelectorTextActive: { color: colors.neutral },
   inviteBtn: { marginTop: spacing.md, flex: 0, paddingHorizontal: spacing.lg },
-
-  fab: {
-    position: 'absolute', bottom: 32, right: 24,
-    width: 56, height: 56, borderRadius: radius.full,
-    backgroundColor: colors.tertiary, justifyContent: 'center', alignItems: 'center',
-    shadowColor: colors.tertiary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
-  },
 });
