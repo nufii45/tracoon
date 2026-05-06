@@ -23,11 +23,11 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
       }}
     >
+      {/* ── Visible Tabs ── */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          href: '/',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
@@ -35,10 +35,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="expenses"
+        name="finance"
         options={{
-          title: 'Expenses',
-          href: '/expenses',
+          title: 'Finance',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="wallet" size={size} color={color} />
@@ -46,21 +45,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="budgets"
-        options={{
-          title: 'Budgets',
-          href: '/budgets',
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pie-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="inventory"
         options={{
           title: 'Inventory',
-          href: '/inventory',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cube" size={size} color={color} />
@@ -68,27 +55,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="purchases"
+        name="household"
         options={{
-          title: 'Purchases',
-          href: '/purchases',
+          title: 'Household',
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cart" size={size} color={color} />
+            <Ionicons name="people" size={size} color={color} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          href: null,
-          headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
-          ),
-        }}
-      />
+
     </Tabs>
   );
 }

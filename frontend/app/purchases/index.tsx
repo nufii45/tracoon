@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { purchasesApi } from '@/api/purchases';
 import { useHouseholdStore } from '@/stores/household-store';
 import { useCurrencyStore } from '@/stores/currency-store';
+import { usePurchases } from '@/features/purchases/hooks/usePurchases';
 import type { Purchase } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
@@ -36,28 +37,7 @@ export default function PurchasesScreen() {
   // Item form state
   const [items, setItems] = useState<Array<{ name: string; quantity: string; unit: string; unit_price: string; total_price: string }>>([]);
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['purchases', household?.id],
-    queryFn: () => purchasesApi.list(household!.id),
-    enabled: !!household,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (d: Parameters<typeof purchasesApi.create>[1]) =>
-      purchasesApi.create(household!.id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['purchases', household?.id] }); resetForm(); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: Record<string, unknown> }) =>
-      purchasesApi.update(household!.id, id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['purchases', household?.id] }); resetForm(); },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => purchasesApi.delete(household!.id, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['purchases', household?.id] }),
-  });
+  const { data, isLoading, refetch, isRefetching, createPurchase, updatePurchase, deletePurchase, isPending: isSaving } = usePurchases(household?.id);
 
   function resetForm() {
     setStoreName(''); setPurchaseDate(new Date().toISOString().slice(0, 10));
@@ -91,9 +71,9 @@ export default function PurchasesScreen() {
       }));
 
     if (editingPurchase) {
-      updateMutation.mutate({
+      updatePurchase({
         id: editingPurchase.id,
-        d: {
+        data: {
           store_name: storeName.trim() || null,
           purchase_date: purchaseDate,
           total_amount: amt,
@@ -101,9 +81,9 @@ export default function PurchasesScreen() {
           receipt_reference: receiptRef.trim() || null,
           notes: notes.trim() || null,
         },
-      });
+      }, { onSuccess: resetForm });
     } else {
-      createMutation.mutate({
+      createPurchase({
         store_name: storeName.trim() || undefined,
         purchase_date: purchaseDate,
         total_amount: amt,
@@ -111,14 +91,14 @@ export default function PurchasesScreen() {
         receipt_reference: receiptRef.trim() || undefined,
         notes: notes.trim() || undefined,
         items: itemPayloads.length > 0 ? itemPayloads : undefined,
-      });
+      }, { onSuccess: resetForm });
     }
   }
 
   function handleDelete(p: Purchase) {
     Alert.alert('Delete Purchase', `Remove this ${p.store_name || ''} purchase?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(p.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => deletePurchase(p.id) },
     ]);
   }
 
@@ -182,7 +162,7 @@ export default function PurchasesScreen() {
     );
   }
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -366,7 +346,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 8,
   },
 
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
   modalSheet: {
     backgroundColor: colors.surface, borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl, paddingBottom: spacing.xl, maxHeight: '90%',
@@ -413,5 +393,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg, alignItems: 'center',
   },
   saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: '#fff' },
+  saveBtnText: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textInverse },
 });

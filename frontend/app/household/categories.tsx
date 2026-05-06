@@ -4,11 +4,11 @@ import {
   Modal, TextInput, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/auth-store';
 import { useHouseholdStore } from '@/stores/household-store';
-import { categoriesApi } from '@/api/categories';
+import { useCategories } from '@/features/categories/hooks/useCategories';
 import type { Category, CategoryType } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
@@ -75,6 +75,7 @@ export default function SettingsScreen() {
   const { user, logout } = useAuthStore();
   const household = useHouseholdStore((s) => s.currentHousehold);
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   const [showCategories, setShowCategories] = useState(false);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -82,33 +83,8 @@ export default function SettingsScreen() {
   const [form, setForm] = useState(emptyForm);
   const [filterType, setFilterType] = useState<CategoryType | ''>('');
 
-  // ── Queries ──
-  const { data: categories, isLoading: catsLoading } = useQuery({
-    queryKey: ['all-categories', household?.id],
-    queryFn: () => categoriesApi.list(household!.id),
-    enabled: !!household && showCategories,
-  });
-
-  // ── Mutations ──
-  const createCat = useMutation({
-    mutationFn: (d: { name: string; category_type: CategoryType; color?: string; icon?: string }) =>
-      categoriesApi.create(household!.id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['all-categories'] }); queryClient.invalidateQueries({ queryKey: ['categories'] }); closeCatForm(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to create'),
-  });
-
-  const updateCat = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: { name?: string; color?: string; icon?: string } }) =>
-      categoriesApi.update(household!.id, id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['all-categories'] }); queryClient.invalidateQueries({ queryKey: ['categories'] }); closeCatForm(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to update'),
-  });
-
-  const deleteCat = useMutation({
-    mutationFn: (id: string) => categoriesApi.delete(household!.id, id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['all-categories'] }); queryClient.invalidateQueries({ queryKey: ['categories'] }); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to delete'),
-  });
+  // ── Queries & Mutations ──
+  const { data: categories, isLoading: catsLoading, createCategory, updateCategory, deleteCategory, isPending } = useCategories(household?.id, '');
 
   // ── Handlers ──
   const closeCatForm = () => { setShowCatForm(false); setEditingCat(null); setForm(emptyForm); };
@@ -129,16 +105,16 @@ export default function SettingsScreen() {
   const handleSaveCat = useCallback(() => {
     if (!form.name.trim()) return;
     if (editingCat) {
-      updateCat.mutate({ id: editingCat.id, d: { name: form.name.trim(), color: form.color || undefined, icon: form.icon || undefined } });
+      updateCategory({ id: editingCat.id, d: { name: form.name.trim(), color: form.color || undefined, icon: form.icon || undefined } }, { onSuccess: closeCatForm });
     } else {
-      createCat.mutate({ name: form.name.trim(), category_type: form.category_type, color: form.color || undefined, icon: form.icon || undefined });
+      createCategory({ name: form.name.trim(), category_type: form.category_type, color: form.color || undefined, icon: form.icon || undefined }, { onSuccess: closeCatForm });
     }
-  }, [form, editingCat]);
+  }, [form, editingCat, createCategory, updateCategory]);
 
   const handleDeleteCat = (cat: Category) => {
     Alert.alert('Delete Category', `Delete "${cat.name}"? Expenses using it won't be deleted.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteCat.mutate(cat.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteCategory(cat.id) },
     ]);
   };
 
@@ -155,7 +131,7 @@ export default function SettingsScreen() {
     items: filteredCats.filter((c: Category) => c.category_type === t.key),
   })).filter(g => !filterType || g.key === filterType);
 
-  const isPending = createCat.isPending || updateCat.isPending;
+
 
   // ── Render Category Card ──
   const renderCat = (cat: Category) => {
@@ -178,61 +154,12 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(user?.full_name || user?.email || '?')[0].toUpperCase()}
-            </Text>
-          </View>
-          <Text style={styles.profileName}>{user?.full_name || 'Traccoon User'}</Text>
-          <Text style={styles.profileEmail}>{user?.email}</Text>
-        </View>
-
-        {/* Account */}
-        <Text style={styles.sectionTitle}>Account</Text>
-        <View style={styles.section}>
-          <SettingsItem icon="person-outline" label="Full Name" value={user?.full_name || '—'} />
-          <SettingsItem icon="mail-outline" label="Email" value={user?.email} />
-        </View>
-
-        {/* Household */}
-        <Text style={styles.sectionTitle}>Household</Text>
-        <View style={styles.section}>
-          <SettingsItem icon="home-outline" label="Current Household" value={household?.name || 'None selected'} />
-          <SettingsItem icon="shield-outline" label="Your Role" value={household?.my_role || '—'} />
-        </View>
-
-        {/* Management */}
-        <Text style={styles.sectionTitle}>Management</Text>
-        <View style={styles.section}>
-          <SettingsItem
-            icon="pricetags-outline"
-            label="Manage Categories"
-            value={`Organize your expense, budget & inventory categories`}
-            onPress={() => setShowCategories(true)}
-          />
-        </View>
-
-        {/* App */}
-        <Text style={styles.sectionTitle}>App</Text>
-        <View style={styles.section}>
-          <SettingsItem icon="information-circle-outline" label="Version" value="1.0.0" />
-        </View>
-
-        {/* Sign Out */}
-        <View style={[styles.section, { marginTop: spacing.md }]}>
-          <SettingsItem icon="log-out-outline" label="Sign Out" onPress={handleLogout} danger />
-        </View>
-      </ScrollView>
-
-      {/* ══════ Categories Management Modal ══════ */}
-      <Modal visible={showCategories} animationType="slide" onRequestClose={() => setShowCategories(false)}>
-        <SafeAreaView style={styles.safe} edges={['top']}>
-          <View style={styles.catHeader}>
-            <TouchableOpacity onPress={() => setShowCategories(false)}>
+    <View style={[styles.safe, { paddingTop: Platform.OS === 'android' ? 40 : Math.max(insets.top, 20) }]}>
+      <View style={styles.catHeader}>
+            <TouchableOpacity onPress={() => {
+              const router = require('expo-router').useRouter();
+              router.back();
+            }}>
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.catHeaderTitle}>Categories</Text>
@@ -286,21 +213,20 @@ export default function SettingsScreen() {
               )}
             </ScrollView>
           )}
-        </SafeAreaView>
-
         {/* ── Create/Edit Category Sub-Modal ── */}
         <Modal visible={showCatForm} transparent animationType="slide" onRequestClose={closeCatForm}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHandle} />
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{editingCat ? 'Edit Category' : 'New Category'}</Text>
-                <TouchableOpacity onPress={closeCatForm}>
-                  <Ionicons name="close-circle" size={28} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeCatForm} />
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', maxHeight: '90%' }}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{editingCat ? 'Edit Category' : 'New Category'}</Text>
+                  <TouchableOpacity onPress={closeCatForm}>
+                    <Ionicons name="close-circle" size={28} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
 
-              <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView showsVerticalScrollIndicator={false}>
                 <Text style={styles.label}>Name *</Text>
                 <TextInput
                   style={styles.input}
@@ -391,9 +317,9 @@ export default function SettingsScreen() {
               </View>
             </View>
           </KeyboardAvoidingView>
+          </View>
         </Modal>
-      </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

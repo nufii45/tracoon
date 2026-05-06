@@ -5,12 +5,14 @@ import {
   KeyboardAvoidingView, Platform, Alert, ScrollView,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { expensesApi } from '@/api/expenses';
 import { categoriesApi } from '@/api/categories';
 import { useHouseholdStore } from '@/stores/household-store';
 import { useCurrencyStore } from '@/stores/currency-store';
+import { useExpenses } from '@/features/expenses/hooks/useExpenses';
 import RecurringSection from '@/components/RecurringSection';
 import type { Expense, Category } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
@@ -36,6 +38,8 @@ export default function ExpensesScreen() {
   const household = useHouseholdStore((s) => s.currentHousehold);
   const sym = useCurrencyStore((s) => s.currency.symbol);
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [segment, setSegment] = useState<Segment>('expenses');
   const [showModal, setShowModal] = useState(false);
@@ -43,38 +47,13 @@ export default function ExpensesScreen() {
   const [form, setForm] = useState(emptyForm);
   const [filterCat, setFilterCat] = useState<string>('');
 
-  // ── Queries ──
-  const { data, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['expenses', household?.id, filterCat],
-    queryFn: () => expensesApi.list(household!.id, filterCat ? { category_id: filterCat } : undefined),
-    enabled: !!household,
-  });
+  // ── Queries & Mutations ──
+  const { data, isLoading, refetch, isRefetching, createExpense, updateExpense, deleteExpense, isPending } = useExpenses(household?.id, filterCat);
 
   const { data: categories } = useQuery({
     queryKey: ['categories', household?.id, 'expense'],
     queryFn: () => categoriesApi.list(household!.id, 'expense'),
     enabled: !!household,
-  });
-
-  // ── Mutations ──
-  const createMutation = useMutation({
-    mutationFn: (d: Parameters<typeof expensesApi.create>[1]) =>
-      expensesApi.create(household!.id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['expenses'] }); closeModal(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to create'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: Record<string, unknown> }) =>
-      expensesApi.update(household!.id, id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['expenses'] }); closeModal(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to update'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => expensesApi.delete(household!.id, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to delete'),
   });
 
   // ── Helpers ──
@@ -116,16 +95,16 @@ export default function ExpensesScreen() {
     payload.is_recurring = form.is_recurring;
 
     if (editingExpense) {
-      updateMutation.mutate({ id: editingExpense.id, d: payload });
+      updateExpense({ id: editingExpense.id, data: payload }, { onSuccess: closeModal });
     } else {
-      createMutation.mutate(payload);
+      createExpense(payload, { onSuccess: closeModal });
     }
-  }, [form, editingExpense]);
+  }, [form, editingExpense, createExpense, updateExpense]);
 
   const handleDelete = (item: Expense) => {
     Alert.alert('Delete Expense', `Delete "${item.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(item.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteExpense(item.id) },
     ]);
   };
 
@@ -185,11 +164,17 @@ export default function ExpensesScreen() {
     );
   }
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
   const canSave = form.title.trim() && form.amount && form.expense_date;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { paddingTop: Platform.OS === 'android' ? 40 : Math.max(insets.top, 20) }]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Expenses</Text>
+        <View style={{ width: 40 }} />
+      </View>
       <View style={styles.container}>
         {/* Segment Toggle */}
         <View style={styles.segmentRow}>
@@ -269,8 +254,9 @@ export default function ExpensesScreen() {
             )}
 
             {/* FAB */}
-            <TouchableOpacity style={styles.fab} onPress={openCreate} activeOpacity={0.8}>
-              <Ionicons name="add" size={28} color={colors.white} />
+            <TouchableOpacity style={styles.fabPill} onPress={openCreate} activeOpacity={0.8}>
+              <Ionicons name="add" size={20} color={colors.textInverse} />
+              <Text style={styles.fabPillText}>Add Expense</Text>
             </TouchableOpacity>
 
             {/* ══════ Create / Edit Modal ══════ */}
@@ -424,13 +410,21 @@ export default function ExpensesScreen() {
           </>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, paddingHorizontal: spacing.md },
+
+  // Header
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing.sm, paddingBottom: spacing.sm,
+  },
+  headerTitle: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.textPrimary },
+  backBtn: { padding: spacing.sm },
 
   // Segment toggle
   segmentRow: {
@@ -480,7 +474,7 @@ const styles = StyleSheet.create({
   },
   cardIcon: {
     width: 44, height: 44, borderRadius: radius.md,
-    backgroundColor: 'rgba(108,92,231,0.15)', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: `${colors.tertiary}26`, justifyContent: 'center', alignItems: 'center',
   },
   cardContent: { flex: 1 },
   cardTitle: { fontSize: fontSize.md, fontWeight: fontWeight.medium, color: colors.textPrimary },
@@ -488,7 +482,7 @@ const styles = StyleSheet.create({
   cardDate: { fontSize: fontSize.xs, color: colors.textMuted },
   catChip: {
     paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm,
-    backgroundColor: 'rgba(0,206,201,0.15)',
+    backgroundColor: `${colors.accent}26`,
   },
   catChipText: { fontSize: 10, color: colors.accent, fontWeight: fontWeight.medium },
   cardAmount: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.danger },
@@ -503,14 +497,16 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: fontSize.lg, color: colors.textSecondary, fontWeight: fontWeight.medium },
   emptySubtext: { fontSize: fontSize.sm, color: colors.textMuted },
 
-  // FAB
-  fab: {
+  // FAB (Pill shaped)
+  fabPill: {
     position: 'absolute', bottom: 24, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    backgroundColor: colors.primary, paddingHorizontal: spacing.lg,
+    paddingVertical: 14, borderRadius: radius.full,
     elevation: 8, shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
   },
+  fabPillText: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.textInverse },
 
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },

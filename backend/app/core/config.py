@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # App config
     APP_NAME: str = "Traccoon"
     APP_VERSION: str = "0.1.0"
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
+    FRONTEND_ORIGIN: str = "http://localhost:8081"
     DEBUG: bool = False
 
     class Config:

@@ -11,6 +11,7 @@ import { budgetsApi } from '@/api/budgets';
 import { categoriesApi } from '@/api/categories';
 import { useHouseholdStore } from '@/stores/household-store';
 import { useCurrencyStore } from '@/stores/currency-store';
+import { useBudgets } from '@/features/budgets/hooks/useBudgets';
 import type { Budget, Category } from '@/types';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
@@ -34,38 +35,13 @@ export default function BudgetsScreen() {
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  // ── Queries ──
-  const { data: budgets, isLoading, refetch, isRefetching } = useQuery({
-    queryKey: ['budgets', household?.id],
-    queryFn: () => budgetsApi.list(household!.id),
-    enabled: !!household,
-  });
+  // ── Queries & Mutations ──
+  const { data: budgets, isLoading, refetch, isRefetching, createBudget, updateBudget, deleteBudget, isPending } = useBudgets(household?.id);
 
   const { data: categories } = useQuery({
     queryKey: ['categories', household?.id, 'budget'],
     queryFn: () => categoriesApi.list(household!.id, 'budget'),
     enabled: !!household,
-  });
-
-  // ── Mutations ──
-  const createMutation = useMutation({
-    mutationFn: (d: Parameters<typeof budgetsApi.create>[1]) =>
-      budgetsApi.create(household!.id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['budgets'] }); closeModal(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to create'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, d }: { id: string; d: Record<string, unknown> }) =>
-      budgetsApi.update(household!.id, id, d),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['budgets'] }); closeModal(); },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to update'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => budgetsApi.delete(household!.id, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['budgets'] }),
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to delete'),
   });
 
   // ── Helpers ──
@@ -105,16 +81,16 @@ export default function BudgetsScreen() {
     if (form.description.trim()) payload.description = form.description.trim();
 
     if (editingBudget) {
-      updateMutation.mutate({ id: editingBudget.id, d: payload });
+      updateBudget({ id: editingBudget.id, data: payload }, { onSuccess: closeModal });
     } else {
-      createMutation.mutate(payload);
+      createBudget(payload, { onSuccess: closeModal });
     }
-  }, [form, editingBudget]);
+  }, [form, editingBudget, createBudget, updateBudget]);
 
   const handleDelete = (item: Budget) => {
     Alert.alert('Delete Budget', `Delete "${item.name}"?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(item.id) },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteBudget(item.id) },
     ]);
   };
 
@@ -149,7 +125,7 @@ export default function BudgetsScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.cardHeader}>
-          <View style={[styles.cardIcon, isOver && { backgroundColor: 'rgba(255,107,107,0.15)' }]}>
+          <View style={[styles.cardIcon, isOver && { backgroundColor: `${colors.danger}26` }]}>
             <Ionicons
               name={isOver ? 'warning' : 'pie-chart'}
               size={20}
@@ -219,7 +195,6 @@ export default function BudgetsScreen() {
     );
   }
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
   const canSave = form.name.trim() && form.amount && form.period_start && form.period_end;
 
   return (
@@ -435,7 +410,7 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   cardIcon: {
     width: 40, height: 40, borderRadius: radius.md,
-    backgroundColor: 'rgba(108,92,231,0.15)', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: `${colors.tertiary}26`, justifyContent: 'center', alignItems: 'center',
   },
   cardHeaderText: { flex: 1 },
   cardTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, color: colors.textPrimary },

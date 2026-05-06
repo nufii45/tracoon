@@ -241,8 +241,8 @@ const styles = StyleSheet.create({
   fieldError: { fontSize: fontSize.xs, color: colors.danger, marginLeft: spacing.xs },
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: 'rgba(255,107,107,0.1)', borderRadius: radius.md,
-    padding: spacing.md, borderWidth: 1, borderColor: 'rgba(255,107,107,0.3)',
+    backgroundColor: `${colors.danger}1A`, borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: `${colors.danger}4D`,
   },
   errorText: { flex: 1, fontSize: fontSize.sm, color: colors.danger },
   button: {

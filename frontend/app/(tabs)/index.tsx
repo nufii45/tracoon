@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { householdsApi } from '@/api/households';
-import { dashboardApi } from '@/api/dashboard';
+import { useDashboardSummary } from '@/features/dashboard/hooks/useDashboardSummary';
 import { useAuthStore } from '@/stores/auth-store';
 import { useHouseholdStore } from '@/stores/household-store';
 import { useCurrencyStore } from '@/stores/currency-store';
@@ -59,31 +59,13 @@ export default function HomeScreen() {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [createName, setCreateName] = useState('');
-  const [createDesc, setCreateDesc] = useState('');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'member' | 'admin' | 'viewer'>('member');
-
   // ── Queries ──
   const { data: households, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['households'],
     queryFn: householdsApi.list,
   });
 
-  const { data: householdDetail, isLoading: isDetailLoading } = useQuery({
-    queryKey: ['household-detail', currentHousehold?.id],
-    queryFn: () => householdsApi.get(currentHousehold!.id),
-    enabled: !!currentHousehold && showDetailModal,
-  });
-
-  // Single dashboard query replaces expenses, budgets, recurring queries
-  const { data: dashboard, isLoading: isDashLoading } = useQuery<DashboardSummary>({
-    queryKey: ['dashboard', currentHousehold?.id],
-    queryFn: () => dashboardApi.get(currentHousehold!.id),
-    enabled: !!currentHousehold,
-  });
+  const { data: dashboard, isLoading: isDashLoading, refetch: refetchDash, isRefetching: isDashRefetching } = useDashboardSummary(currentHousehold?.id);
 
   useEffect(() => {
     if (households?.length && !currentHousehold) {
@@ -95,83 +77,6 @@ export default function HomeScreen() {
   const spentThisMonth = dashboard?.spent_this_month ?? null;
   const availableBalance = dashboard?.total_budget ?? null;
   const budgetLeft = dashboard?.total_budget_remaining ?? null;
-
-  // ── Mutations ──
-  const createMutation = useMutation({
-    mutationFn: (data: { name: string; description?: string }) => householdsApi.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['households'] });
-      setCreateName(''); setCreateDesc(''); setShowCreateModal(false);
-    },
-    onError: (err: any) => Alert.alert('Error', err?.response?.data?.detail || 'Failed to create household'),
-  });
-
-  const addMemberMutation = useMutation({
-    mutationFn: (data: { email: string; role: string }) => householdsApi.addMember(currentHousehold!.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['household-detail', currentHousehold?.id] });
-      setInviteEmail('');
-      Alert.alert('Success', 'Member invited successfully!');
-    },
-    onError: (err: any) => Alert.alert('Error', err?.response?.data?.detail || 'Failed to add member'),
-  });
-
-  const removeMemberMutation = useMutation({
-    mutationFn: (memberId: string) => householdsApi.removeMember(currentHousehold!.id, memberId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household-detail', currentHousehold?.id] }),
-    onError: (err: any) => Alert.alert('Error', err?.response?.data?.detail || 'Failed to remove member'),
-  });
-
-  const handleCreate = useCallback(() => {
-    if (!createName.trim()) return;
-    createMutation.mutate({ name: createName.trim(), description: createDesc.trim() || undefined });
-  }, [createName, createDesc]);
-
-  const handleInvite = useCallback(() => {
-    if (!inviteEmail.trim()) return;
-    addMemberMutation.mutate({ email: inviteEmail.trim(), role: inviteRole });
-  }, [inviteEmail, inviteRole]);
-
-  const handleRemoveMember = useCallback((member: HouseholdMember) => {
-    const isMe = member.user_id === user?.id;
-    Alert.alert(
-      isMe ? 'Leave Household' : 'Remove Member',
-      isMe ? 'Are you sure you want to leave?' : `Remove ${member.user_full_name || member.user_email}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: isMe ? 'Leave' : 'Remove', style: 'destructive', onPress: () => removeMemberMutation.mutate(member.id) },
-      ],
-    );
-  }, [user, currentHousehold]);
-
-  // ── Member row ──
-  const renderMember = (member: HouseholdMember) => {
-    const meta = roleMeta[member.role] || roleMeta.member;
-    const isMe = member.user_id === user?.id;
-    const canRemove = householdDetail?.my_role === 'owner' || isMe;
-    return (
-      <View key={member.id} style={styles.memberRow}>
-        <View style={[styles.memberAvatar, { backgroundColor: meta.color + '30' }]}>
-          <Text style={[styles.memberAvatarText, { color: meta.color }]}>
-            {(member.user_full_name || member.user_email)?.[0]?.toUpperCase() || '?'}
-          </Text>
-        </View>
-        <View style={styles.memberInfo}>
-          <Text style={styles.memberName}>{member.user_full_name || 'Traccoon User'}{isMe ? ' (you)' : ''}</Text>
-          <Text style={styles.memberEmail}>{member.user_email}</Text>
-        </View>
-        <View style={[styles.memberRoleBadge, { backgroundColor: meta.color + '20' }]}>
-          <Ionicons name={meta.icon} size={12} color={meta.color} />
-          <Text style={[styles.memberRoleText, { color: meta.color }]}>{member.role}</Text>
-        </View>
-        {canRemove && member.role !== 'owner' && (
-          <TouchableOpacity style={styles.memberRemoveBtn} onPress={() => handleRemoveMember(member)}>
-            <Ionicons name="close-circle" size={20} color={colors.danger} />
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
 
   // ── Recurring section ──
   const renderRecurring = () => {
@@ -297,12 +202,10 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
+            refreshing={isRefetching || isDashRefetching}
             onRefresh={() => {
               refetch();
-              if (currentHousehold) {
-                queryClient.invalidateQueries({ queryKey: ['dashboard', currentHousehold.id] });
-              }
+              refetchDash();
             }}
             tintColor={colors.tertiary}
           />
@@ -317,17 +220,10 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
-            {/* ── Create Household button (moved from old FAB) ── */}
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowCreateModal(true)}>
-              <Ionicons name="home-outline" size={22} color={colors.tertiary} />
-            </TouchableOpacity>
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => Alert.alert('Notifications', 'No new notifications')}>
               <Ionicons name="notifications-outline" size={22} color={colors.tertiary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/settings')}>
-              <Ionicons name="settings-outline" size={22} color={colors.tertiary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowDetailModal(true)}>
+            <TouchableOpacity style={styles.avatarBtn} onPress={() => router.push('/(tabs)/household')}>
               <Text style={styles.avatarText}>
                 {(user?.full_name || user?.email || '?')[0].toUpperCase()}
               </Text>
@@ -376,7 +272,7 @@ export default function HomeScreen() {
         {dashboard && (dashboard.overdue_recurring_count > 0 || dashboard.budgets_over_limit_count > 0 || dashboard.low_stock_count > 0) && (
           <View style={styles.alertsBanner}>
             {dashboard.overdue_recurring_count > 0 && (
-              <TouchableOpacity style={styles.alertItem} onPress={() => router.push('/expenses')}>
+              <TouchableOpacity style={styles.alertItem} onPress={() => router.push('/(tabs)/finance')}>
                 <View style={[styles.alertDot, { backgroundColor: colors.danger }]} />
                 <Text style={styles.alertText}>
                   {dashboard.overdue_recurring_count} overdue recurring expense{dashboard.overdue_recurring_count !== 1 ? 's' : ''}
@@ -385,7 +281,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
             {dashboard.budgets_over_limit_count > 0 && (
-              <TouchableOpacity style={styles.alertItem} onPress={() => router.push('/budgets')}>
+              <TouchableOpacity style={styles.alertItem} onPress={() => router.push('/(tabs)/finance')}>
                 <View style={[styles.alertDot, { backgroundColor: colors.warning }]} />
                 <Text style={styles.alertText}>
                   {dashboard.budgets_over_limit_count} budget{dashboard.budgets_over_limit_count !== 1 ? 's' : ''} over limit
@@ -414,13 +310,13 @@ export default function HomeScreen() {
               <Text style={styles.statBoxLabel}>Inventory</Text>
             </TouchableOpacity>
             <View style={styles.statBoxDivider} />
-            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/purchases')}>
+            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/(tabs)/inventory')}>
               <Ionicons name="cart-outline" size={18} color={colors.secondary} />
               <Text style={styles.statBoxValue}>{dashboard.purchase_count_this_month}</Text>
               <Text style={styles.statBoxLabel}>Purchases</Text>
             </TouchableOpacity>
             <View style={styles.statBoxDivider} />
-            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/budgets')}>
+            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/(tabs)/finance')}>
               <Ionicons name="pie-chart-outline" size={18} color={
                 dashboard.budget_utilization_pct > 100 ? colors.danger
                 : dashboard.budget_utilization_pct > 80 ? colors.warning
@@ -437,7 +333,7 @@ export default function HomeScreen() {
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Budgets</Text>
-              <TouchableOpacity onPress={() => router.push('/budgets')}>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/finance')}>
                 <Text style={styles.seeAll}>See All</Text>
               </TouchableOpacity>
             </View>
@@ -474,10 +370,10 @@ export default function HomeScreen() {
               {dashboard.quick_actions.map((a: QuickAction) => (
                 <TouchableOpacity key={a.key} style={styles.quickActionCard} activeOpacity={0.7}
                   onPress={() => {
-                    if (a.key === 'review_budgets') router.push('/budgets');
-                    else if (a.key === 'restock_items') router.push('/inventory');
-                    else if (a.key === 'log_expense') router.push('/expenses');
-                    else if (a.key === 'create_budget') router.push('/budgets');
+                    if (a.key === 'review_budgets') router.push('/(tabs)/finance');
+                    else if (a.key === 'restock_items') router.push('/(tabs)/inventory');
+                    else if (a.key === 'log_expense') router.push('/(tabs)/finance');
+                    else if (a.key === 'create_budget') router.push('/(tabs)/finance');
                   }}
                 >
                   <View style={styles.quickActionIcon}>
@@ -505,7 +401,7 @@ export default function HomeScreen() {
         {/* ── Recent Expenses ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Expenses</Text>
-          <TouchableOpacity onPress={() => router.push('/expenses')}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/finance')}>
             <Text style={styles.seeAll}>See All</Text>
           </TouchableOpacity>
         </View>
@@ -547,7 +443,7 @@ export default function HomeScreen() {
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Purchases</Text>
-              <TouchableOpacity onPress={() => router.push('/purchases')}>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/inventory')}>
                 <Text style={styles.seeAll}>See All</Text>
               </TouchableOpacity>
             </View>
@@ -575,109 +471,7 @@ export default function HomeScreen() {
         ) : null}
       </ScrollView>
 
-      {/* ══════ Create Household Modal ══════ */}
-      <Modal visible={showCreateModal} transparent animationType="slide" onRequestClose={() => setShowCreateModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>New Household</Text>
-            <Text style={styles.label}>Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={createName}
-              onChangeText={setCreateName}
-              placeholder="My Home"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-            />
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.inputMultiline]}
-              value={createDesc}
-              onChangeText={setCreateDesc}
-              placeholder="Optional description..."
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={3}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.btnSecondary} onPress={() => { setCreateName(''); setCreateDesc(''); setShowCreateModal(false); }}>
-                <Text style={styles.btnSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.btnPrimary, !createName.trim() && styles.btnDisabled]}
-                onPress={handleCreate}
-                disabled={!createName.trim() || createMutation.isPending}
-              >
-                {createMutation.isPending
-                  ? <ActivityIndicator size="small" color={colors.neutral} />
-                  : <Text style={styles.btnPrimaryText}>Create</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
-      {/* ══════ Household Detail Modal ══════ */}
-      <Modal visible={showDetailModal} transparent animationType="slide" onRequestClose={() => setShowDetailModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.modalContentTall]}>
-            <View style={styles.modalHandle} />
-            <View style={styles.detailHeader}>
-              <Text style={styles.modalTitle}>{currentHousehold?.name || 'Household'}</Text>
-              <TouchableOpacity onPress={() => setShowDetailModal(false)}>
-                <Ionicons name="close-circle" size={28} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            {currentHousehold?.description
-              ? <Text style={styles.detailDesc}>{currentHousehold.description}</Text>
-              : null}
-            <ScrollView style={styles.detailScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.detailSectionTitle}>
-                Members{householdDetail?.members ? ` (${householdDetail.members.length})` : ''}
-              </Text>
-              {isDetailLoading
-                ? <ActivityIndicator color={colors.secondary} style={{ marginVertical: spacing.md }} />
-                : householdDetail?.members.map(renderMember)}
-              {(householdDetail?.my_role === 'owner' || householdDetail?.my_role === 'admin') && (
-                <View style={styles.inviteSection}>
-                  <Text style={styles.detailSectionTitle}>Invite Member</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={inviteEmail}
-                    onChangeText={setInviteEmail}
-                    placeholder="Enter email address"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                  <View style={styles.roleSelector}>
-                    {(['member', 'admin', 'viewer'] as const).map((r) => (
-                      <TouchableOpacity
-                        key={r}
-                        style={[styles.roleSelectorBtn, inviteRole === r && styles.roleSelectorActive]}
-                        onPress={() => setInviteRole(r)}
-                      >
-                        <Ionicons name={roleMeta[r]?.icon || 'person'} size={14} color={inviteRole === r ? colors.neutral : colors.textSecondary} />
-                        <Text style={[styles.roleSelectorText, inviteRole === r && styles.roleSelectorTextActive]}>{r}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.btnPrimary, styles.inviteBtn, !inviteEmail.trim() && styles.btnDisabled]}
-                    onPress={handleInvite}
-                    disabled={!inviteEmail.trim() || addMemberMutation.isPending}
-                  >
-                    {addMemberMutation.isPending
-                      ? <ActivityIndicator size="small" color={colors.neutral} />
-                      : <><Ionicons name="person-add" size={18} color={colors.neutral} /><Text style={styles.btnPrimaryText}>Send Invite</Text></>}
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* ══════ Radial FAB — Quick Access Panel ══════ */}
       <RadialFAB />
@@ -825,12 +619,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center',
     marginBottom: spacing.xs,
   },
-  recurringIconActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  recurringIconActive: { backgroundColor: `${colors.white}33` },
   recurringName: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.tertiary },
   recurringFreq: { fontSize: fontSize.xs, color: colors.textMuted },
   recurringAmount: { fontSize: fontSize.md, fontWeight: fontWeight.bold, color: colors.tertiary, marginTop: spacing.xs },
   recurringTextActive: { color: colors.neutral },
-  recurringSubActive: { color: 'rgba(234,224,210,0.7)' },
+  recurringSubActive: { color: `${colors.primaryLight}B3` },
 
   expenseList: { paddingHorizontal: spacing.md, gap: spacing.xs },
   expenseRow: {

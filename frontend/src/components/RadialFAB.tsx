@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import {
   Animated,
@@ -9,27 +8,30 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, radius, fontSize, fontWeight } from '@/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
 interface ActionItem {
   label: string;
-  icon: string;   // emoji icon — swap for an icon library if preferred
+  icon: IoniconsName;
   route: string;  
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ACTIONS: ActionItem[] = [
-  { label: 'Expense',   icon: '', route: '/(tabs)/expenses'  },
-  { label: 'Budget',    icon: '', route: '/(tabs)/budgets'   },
-  { label: 'Inventory', icon: '', route: '/(tabs)/inventory' },
+  { label: 'Expense',   icon: 'cash-outline', route: '/expenses'  },
+  { label: 'Finance',   icon: 'pie-chart-outline', route: '/(tabs)/finance'   },
+  { label: 'Inventory', icon: 'cube-outline', route: '/(tabs)/inventory' },
+  { label: 'Scan Receipt', icon: 'scan-outline', route: '#' }, // Placeholder for OCR
 ];
 
-const FAB_SIZE     = 58;
-const ACTION_SIZE  = 44;   // min 44dp for comfortable touch target
-const ITEM_SPACING = 64;   // vertical gap between each action button center
-const ANIMATION_MS = 260;
+const FAB_SIZE = 58;
+const ANIMATION_MS = 200;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -45,59 +47,38 @@ export default function RadialFAB() {
     outputRange: ['0deg', '135deg'], // 135° turns "+" into "×"
   });
 
-  // Per-action animated values
-  const actionAnims = useRef(ACTIONS.map(() => new Animated.Value(0))).current;
+  // Menu animations
+  const menuScale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.8, 1],
+  });
+  const menuOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const menuTranslateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [20, 0],
+  });
 
   function toggle() {
-    const toValue   = open ? 0 : 1;
-    const isOpening = !open;
-    setOpen(isOpening);
-
-    // Items closest to FAB animate first when opening; reverse when closing
-    const actionAnimations = actionAnims.map((anim, i) => {
-      const staggerIndex = isOpening ? i : ACTIONS.length - 1 - i;
-      return Animated.timing(anim, {
-        toValue,
-        duration: ANIMATION_MS,
-        delay: staggerIndex * 45,
-        easing: isOpening
-          ? Easing.out(Easing.back(1.4))
-          : Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      });
-    });
-
-    Animated.parallel([
-      Animated.timing(progress, {
-        toValue,
-        duration: ANIMATION_MS,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      ...actionAnimations,
-    ]).start();
+    const toValue = open ? 0 : 1;
+    setOpen(!open);
+    Animated.timing(progress, {
+      toValue,
+      duration: ANIMATION_MS,
+      easing: open ? Easing.in(Easing.cubic) : Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
   }
 
   function handleAction(route: string) {
-    const closeAnims = actionAnims.map((anim, i) =>
-      Animated.timing(anim, {
-        toValue: 0,
-        duration: 160,
-        delay: (ACTIONS.length - 1 - i) * 25,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      })
-    );
-
-    Animated.parallel([
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: 160,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      ...closeAnims,
-    ]).start(() => {
+    Animated.timing(progress, {
+      toValue: 0,
+      duration: 160,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
       setOpen(false);
       router.push(route as any);
     });
@@ -108,58 +89,35 @@ export default function RadialFAB() {
 
       {/* ── Scrim (tap outside to close) ── */}
       {open && (
-        <Pressable style={StyleSheet.absoluteFill} onPress={toggle} />
+        <Pressable style={styles.scrim} onPress={toggle} />
       )}
 
-      {/* ── Action Buttons ── */}
-      {ACTIONS.map((action, i) => {
-        // Each item slides straight up from the FAB.
-        // Index 0 is closest to FAB, index N-1 is furthest.
-        const destinationY = -(ITEM_SPACING * (i + 1));
-
-        const translateY = actionAnims[i].interpolate({
-          inputRange:  [0, 1],
-          outputRange: [0, destinationY],
-        });
-        const opacity = actionAnims[i].interpolate({
-          inputRange:  [0, 0.2, 1],
-          outputRange: [0, 0,   1],
-        });
-        const scale = actionAnims[i].interpolate({
-          inputRange:  [0, 1],
-          outputRange: [0.5, 1],
-        });
-
-        return (
-          <Animated.View
+      {/* ── Popover Menu ── */}
+      <Animated.View
+        style={[
+          styles.menu,
+          {
+            opacity: menuOpacity,
+            transform: [{ scale: menuScale }, { translateY: menuTranslateY }],
+            pointerEvents: open ? 'auto' : 'none',
+          },
+        ]}
+      >
+        {ACTIONS.map((action, i) => (
+          <Pressable
             key={action.route}
-            style={[
-              styles.actionWrapper,
-              { opacity, transform: [{ translateY }, { scale }] },
+            style={({ pressed }) => [
+              styles.menuItem,
+              i < ACTIONS.length - 1 && styles.menuItemBorder,
+              pressed && styles.menuItemPressed,
             ]}
+            onPress={() => handleAction(action.route)}
           >
-            {/* Label pill — to the left of the button */}
-            <Animated.View
-              style={[
-                styles.labelPill,
-                { opacity },
-              ]}
-            >
-              <Text style={styles.labelText}>{action.label}</Text>
-            </Animated.View>
-
-            <Pressable
-              onPress={() => handleAction(action.route)}
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed && styles.actionButtonPressed,
-              ]}
-            >
-              <Text style={styles.actionIcon}>{action.icon}</Text>
-            </Pressable>
-          </Animated.View>
-        );
-      })}
+            <Ionicons name={action.icon} size={20} color={colors.tertiary} />
+            <Text style={styles.menuItemText}>{action.label}</Text>
+          </Pressable>
+        ))}
+      </Animated.View>
 
       {/* ── Main FAB ── */}
       <Pressable
@@ -184,93 +142,82 @@ export default function RadialFAB() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  /**
-   * The container sits at the bottom-right corner of the screen.
-   * Add this component as the last child inside a `flex: 1` View or
-   * inside a <Stack.Screen> layout that renders it as an overlay.
-   */
   container: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  
+  // ── Popover Menu ──
+  menu: {
+    position: 'absolute',
+    bottom: 100, // Slightly above the FAB
+    right: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.xs,
+    minWidth: 160,
+    shadowColor: colors.tertiary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    // Pivot from bottom right for scale animation
+    transformOrigin: 'bottom right',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  menuItemPressed: {
+    backgroundColor: colors.surfaceElevated,
+  },
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  menuItemText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium,
+    color: colors.textPrimary,
+  },
+
+  // ── Main FAB ──
+  fab: {
     position: 'absolute',
     bottom: 28,
     right: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // ── FAB ──
-  fab: {
     width:  FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: '#2D2D2D',   // Mine Shaft — swap with theme token
+    backgroundColor: colors.tertiary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.tertiary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.30,
     shadowRadius: 8,
     elevation: 8,
-    zIndex: 10,
   },
   fabOpen: {
-    backgroundColor: '#3A3A3A',
+    backgroundColor: colors.textPrimary,
   },
   fabPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.95 }],
   },
   fabIcon: {
-    fontSize: 28,
-    lineHeight: 32,
-    color: '#F5F0E8',             // Akaroa — swap with theme token
+    fontSize: 32,
+    lineHeight: 36,
+    color: colors.neutral,
     fontWeight: '300',
-  },
-
-  // ── Action button ──
-  actionWrapper: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  actionButton: {
-    width:  ACTION_SIZE,
-    height: ACTION_SIZE,
-    borderRadius: ACTION_SIZE / 2,
-    backgroundColor: '#F5F0E8',   // Akaroa
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.20,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  actionButtonPressed: {
-    opacity: 0.80,
-    transform: [{ scale: 0.93 }],
-  },
-  actionIcon: {
-    fontSize: 22,
-  },
-
-  // ── Label pill ──
-  labelPill: {
-    backgroundColor: 'rgba(45,45,45,0.88)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  labelText: {
-    color: '#F5F0E8',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.3,
   },
 });
